@@ -1,13 +1,4 @@
 /**
- * Huffman coding implementation in C.
- * Huffman Coding is a lossless data compression algorithm. It assigns
- * variable-length codes to input characters, with shorter codes assigned to
- * more frequent characters. This algorithm makes sure that the most common
- * characters are represented by shorter bit strings, reducing the overall size
- * of the encoded data.
- *
- * @author GeeksforGeeks (https://www.geeksforgeeks.org/c/huffman-coding-in-c/)
- *
  * functions used in this implementation:
  *
  * - newNode(): creates a new node for the Huffman tree.
@@ -66,127 +57,154 @@
  *                        / \
  *                      [5] [9]
  */
-#include <math.h>
+
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-#include <time.h>
 
 #define MAX 256
 
 typedef struct Node
 {
-    char ch;
-    int freq;
-    struct Node *l, *r;
+    char data;
+    unsigned freq;
+    struct Node *left, *right;
 } Node;
 
-Node* heap[MAX];
-int hs = 0;
-
-Node* newNode(char ch, int freq, Node* l, Node* r)
+typedef struct
 {
-    Node* n = malloc(sizeof(Node));
-    *n = (Node){ch, freq, l, r};
-    return n;
+    unsigned size;
+    unsigned capacity;
+    Node** array;
+} MinHeap;
+
+Node* createNode(char data, unsigned freq)
+{
+    Node* node = (Node*)malloc(sizeof(Node));
+    node->data = data;
+    node->freq = freq;
+    node->left = node->right = NULL;
+    return node;
 }
 
-void push(Node* n)
+MinHeap* createMinHeap(unsigned capacity)
 {
-    int i = hs++;
-    while (i > 0 && n->freq < heap[(i - 1) / 2]->freq)
+    MinHeap* heap = (MinHeap*)malloc(sizeof(MinHeap));
+    heap->size = 0;
+    heap->capacity = capacity;
+    heap->array = (Node**)malloc(capacity * sizeof(Node*));
+    return heap;
+}
+
+void swapNode(Node** a, Node** b)
+{
+    Node* temp = *a;
+    *a = *b;
+    *b = temp;
+}
+
+void minHeapify(MinHeap* heap, int idx)
+{
+    int smallest = idx;
+    int left = 2 * idx + 1;
+    int right = 2 * idx + 2;
+
+    if (left < heap->size &&
+        heap->array[left]->freq < heap->array[smallest]->freq)
+        smallest = left;
+
+    if (right < heap->size &&
+        heap->array[right]->freq < heap->array[smallest]->freq)
+        smallest = right;
+
+    if (smallest != idx)
     {
-        heap[i] = heap[(i - 1) / 2];
+        swapNode(&heap->array[smallest], &heap->array[idx]);
+        minHeapify(heap, smallest);
+    }
+}
+
+Node* extractMin(MinHeap* heap)
+{
+    Node* temp = heap->array[0];
+    heap->array[0] = heap->array[heap->size - 1];
+    heap->size--;
+    minHeapify(heap, 0);
+    return temp;
+}
+void insertMinHeap(MinHeap* heap, Node* node)
+{
+    heap->size++;
+    int i = heap->size - 1;
+
+    while (i && node->freq < heap->array[(i - 1) / 2]->freq)
+    {
+        heap->array[i] = heap->array[(i - 1) / 2];
         i = (i - 1) / 2;
     }
-    heap[i] = n;
+
+    heap->array[i] = node;
+}
+int isSizeOne(MinHeap* heap) { return (heap->size == 1); }
+
+Node* buildHuffmanTree(char data[], int freq[], int size)
+{
+    Node *left, *right, *top;
+
+    MinHeap* heap = createMinHeap(size);
+
+    for (int i = 0; i < size; ++i)
+        heap->array[i] = createNode(data[i], freq[i]);
+
+    heap->size = size;
+
+    for (int i = (heap->size - 2) / 2; i >= 0; --i) minHeapify(heap, i);
+
+    while (!isSizeOne(heap))
+    {
+        left = extractMin(heap);
+        right = extractMin(heap);
+
+        top = createNode('$', left->freq + right->freq);
+        top->left = left;
+        top->right = right;
+
+        insertMinHeap(heap, top);
+    }
+
+    return extractMin(heap);
+}
+void printCodes(Node* root, int arr[], int top)
+{
+    if (root->left)
+    {
+        arr[top] = 0;
+        printCodes(root->left, arr, top + 1);
+    }
+
+    if (root->right)
+    {
+        arr[top] = 1;
+        printCodes(root->right, arr, top + 1);
+    }
+
+    if (!root->left && !root->right)
+    {
+        printf("%c: ", root->data);
+        for (int i = 0; i < top; ++i) printf("%d", arr[i]);
+        printf("\n");
+    }
 }
 
-Node* pop()
+int main(void)
 {
-    Node* min = heap[0];
-    Node* last = heap[--hs];
-    int i = 0, c;
-    while ((c = 2 * i + 1) < hs)
-    {
-        if (c + 1 < hs && heap[c + 1]->freq < heap[c]->freq)
-            c++;
-        if (last->freq <= heap[c]->freq)
-            break;
-        heap[i] = heap[c];
-        i = c;
-    }
-    heap[i] = last;
-    return min;
-}
+    char arr[] = {'a', 'b', 'c', 'd', 'e', 'f'};
+    int freq[] = {5, 9, 12, 13, 16, 45};
+    int size = sizeof(arr) / sizeof(arr[0]);
 
-char codes[MAX][MAX];
-int clen[MAX];
+    Node* root = buildHuffmanTree(arr, freq, size);
 
-void buildCodes(Node* n, int* code, int d)
-{
-    if (!n->l && !n->r)
-    {
-        for (int i = 0; i < d; i++)
-            codes[(unsigned char)n->ch][i] = '0' + code[i];
-        codes[(unsigned char)n->ch][d] = '\0';
-        clen[(unsigned char)n->ch] = d;
-        return;
-    }
-    code[d] = 0;
-    buildCodes(n->l, code, d + 1);
-    code[d] = 1;
-    buildCodes(n->r, code, d + 1);
-}
+    int codes[MAX];
+    printCodes(root, codes, 0);
 
-int main()
-{
-    srand(time(NULL));
-    int n = rand() % 5 + 4;
-    char chars[8];
-    int freq[8], used[26] = {};
-
-    for (int i = 0; i < n; i++)
-    {
-        int r;
-        do
-        {
-            r = rand() % 26;
-        } while (used[r]);
-        used[r] = 1;
-        chars[i] = 'a' + r;
-        freq[i] = rand() % 50 + 1;
-    }
-
-    printf("Input:\n");
-    for (int i = 0; i < n; i++) printf("  '%c' = %d\n", chars[i], freq[i]);
-
-    for (int i = 0; i < n; i++) push(newNode(chars[i], freq[i], NULL, NULL));
-    while (hs > 1)
-    {
-        Node *l = pop(), *r = pop();
-        push(newNode('$', l->freq + r->freq, l, r));
-    }
-
-    Node* root = pop();
-    int code[MAX];
-    buildCodes(root, code, 0);
-
-    printf("\nChar | Freq | Code         | Bits\n");
-    printf("-----|------|--------------|-----\n");
-    int total = 0, tbits = 0;
-    for (int i = 0; i < n; i++)
-    {
-        int b = freq[i] * clen[(unsigned char)chars[i]];
-        tbits += b;
-        total += freq[i];
-        printf(" '%c' |  %-3d | %-12s | %d\n", chars[i], freq[i],
-               codes[(unsigned char)chars[i]], b);
-    }
-
-    int fb = total * (int)ceil(log2(n));
-    printf("\nTotal chars   : %d\n", total);
-    printf("Huffman bits  : %d\n", tbits);
-    printf("Fixed bits    : %d (%d-bit)\n", fb, (int)ceil(log2(n)));
-    printf("Space saved   : %.1f%%\n", 100.0 * (fb - tbits) / fb);
+    return 0;
 }
